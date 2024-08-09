@@ -134,6 +134,7 @@ class SetupQLDet(object):
 
     def get_hbwdet_traces(self, fs):
         df_quantization = self.get_qldet_params(fs)["df_quantization"]
+        self.daq_samples_acc.read()
         self.daq1_acc.read()
         det_td = -self.daq1_acc[10,:self.daq_samples_acc[1]] * self.df_quantization
         hbw_td = self.daq1_acc[11,:self.daq_samples_acc[1]] * self.df_quantization
