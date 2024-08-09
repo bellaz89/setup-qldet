@@ -1,32 +1,37 @@
 #!/usr/bin/python3
-"""setup_qldet_nox.py
+"""setup_qldet.py
 
 Usage:
-    setup_qldet_nox.py set <dmap> <fs> [--hbw-ext=<bw>] [--dif--gain=<dg>] [--enable-sva]
-    setup_qldet_nox.py get <dmap> <fs>
-    setup_qldet_nox.py plot <dmap> <fs>
-    setup_qldet_nox.py (-h | --help)
-    setup_qldet_nox.py --version
+    setup_qldet.py set <dmap> <fs> [--hbw-ext=<bw>] [--dif--gain=<dg>] [--enable-sva]
+    setup_qldet.py get <dmap> <fs>
+    setup_qldet.py plot <dmap> <fs> [--bw-limits=<bl>] [--det-limits=<dl>] [--continuous]
+    setup_qldet.py (-h | --help)
+    setup_qldet.py --version
 
 Options:
-  -h --help        Show this screen.
-  --version        Show version.
-  <dmap>           LLRF controller .dmap file path
-  <fs>             QLDET sample rate (Hz).
-  --hbw-ext=<bw>   Cavity external half bandwidth (Hz).
-  --diff-gain=<df> Differential gain [0, 7].
-  --enable-sva     Enable slow varying approximation.
+  -h --help         Show this screen.
+  --version         Show version.
+  <dmap>            LLRF controller .dmap file path
+  <fs>              QLDET sample rate (Hz).
+  --hbw-ext=<bw>    Cavity external half bandwidth (Hz).
+  --diff-gain=<df>  Differential gain [0, 7].
+  --enable-sva      Enable slow varying approximation.
+  --hbw-limits=<hl> Half bandwidth limits in plots (Hz) [default: 0,500]
+  --det-limits=<dl> Detuning limits in plots (Hz) [default: -500,500]
+  --continuous      Continuously update the detuning plot
 """
 
 import deviceaccess as da
 from docopt import docopt
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 import os
 
 VERSION = "1.0.0"
+DELAY = 1.0
 
-class QLDetIO(object):
+class SetupQLDet(object):
     def __init__(self, dmap_path):
         dmap_path = os.path.split(dmap_path)
         cwd = os.getcwd()
@@ -142,25 +147,28 @@ if __name__ == "__main__":
     hbw_ext = args["--hbw-ext"]
     diff_gain = args["--diff-gain"]
     enable_sva = args["--enable-sva"]
+    hbw_limits = [float(v) for v in arg["--hbw-limits"].split(",")]
+    det_limits = [float(v) for v in arg["--det-limits"].split(",")]
+    continuous = arg["--continuous"]
 
-    qldetio = QLDetIO(dmap)
+    qldetio = SetupQLDet(dmap)
 
     if args["set"]:
         params = qldetio.get_qldet_params(fs)
 
         if hbw_ext is not None:
-            params["hbw_ext"] = hbw_ext
+            params["--hbw-ext"] = hbw_ext
 
         if diff_gain is not None:
-            params["diff_gain"] = diff_gain
+            params["--diff-gain"] = diff_gain
 
         if enable_sva is not None:
-            params["enable_sva"] = enable_sva
+            params["--enable-sva"] = enable_sva
 
         qldetio.set_qldet_params(fs,
-                                 params["hbw_ext"],
-                                 params["diff_gain"],
-                                 params["enable_sva"])
+                                 float(params["hbw_ext"]),
+                                 int(params["diff_gain"]),
+                                 bool(int(params["enable_sva"])))
 
     if args["get"]:
         params = qldetio.get_qldet_params(fs)
@@ -180,9 +188,23 @@ if __name__ == "__main__":
         ax_det.set_xlabel("Sample")
         ax_det.set_ylabel("Detuning (Hz)")
 
+        line_hbw = ax_hbw.set_ylim(*hbw_limits)
+        line_det = ax_det.set_ylim(*det_limits)
+
         ax_hbw.plot(hbw_td)
         ax_det.plot(det_td)
-        fig.show()
+
+        fig.draw()
+        fig.canvas.flush_events()
+
+        if continuous:
+            while True:
+                (hbw_td, det_td) = self.get_hbwdet_traces(fs)
+                line_hbw.set_ydata(hbw_td)
+                line_det.set_ydata(det_td)
+                fig.canvas.draw()
+                fig.canvas.flush_events()
+                time.sleep(DELAY)
 
         input("Press return..")
 
