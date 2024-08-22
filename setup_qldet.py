@@ -2,9 +2,9 @@
 """setup_qldet.py
 
 Usage:
-    setup_qldet.py set <dmap> <fs> [--hbw-ext=<bw>] [--dif--gain=<dg>] [--enable-sva]
+    setup_qldet.py set <dmap> <fs> [--hbw-ext=<bw>] [--diff-gain=<dg>] [--enable-sva]
     setup_qldet.py get <dmap> <fs>
-    setup_qldet.py plot <dmap> <fs> [--bw-limits=<bl>] [--det-limits=<dl>] [--continuous]
+    setup_qldet.py plot <dmap> <fs> [--hbw-limits=<bl>] [--det-limits=<dl>] [--continuous]
     setup_qldet.py (-h | --help)
     setup_qldet.py --version
 
@@ -14,7 +14,7 @@ Options:
   <dmap>            LLRF controller .dmap file path
   <fs>              QLDET sample rate (Hz).
   --hbw-ext=<bw>    Cavity external half bandwidth (Hz).
-  --diff-gain=<df>  Differential gain [0, 7].
+  --diff-gain=<df>  Differential gain [0, 7] [default: 7].
   --enable-sva      Enable slow varying approximation.
   --hbw-limits=<hl> Half bandwidth limits in plots (Hz) [default: 0,500]
   --det-limits=<dl> Detuning limits in plots (Hz) [default: -500,500]
@@ -42,9 +42,9 @@ class SetupQLDet(object):
         self.ctrl_board = ctrl_board
         os.chdir(cwd)
 
-        probe_idx_acc = ctrl_board.getScalarRegisterAccessor(np.int32, "/APP/WORD_PIEZO_PRO_SEL")
-        vforw_idx_acc = ctrl_board.getScalarRegisterAccessor(np.int32, "/APP/WORD_PIEZO_FOR_SEL")
-        vrefl_idx_acc = ctrl_board.getScalarRegisterAccessor(np.int32, "/APP/WORD_PIEZO_REF_SEL")
+        self.probe_idx_acc = ctrl_board.getScalarRegisterAccessor(np.int32, "/APP/WORD_PIEZO_PRO_SEL")
+        self.vforw_idx_acc = ctrl_board.getScalarRegisterAccessor(np.int32, "/APP/WORD_PIEZO_FOR_SEL")
+        self.vrefl_idx_acc = ctrl_board.getScalarRegisterAccessor(np.int32, "/APP/WORD_PIEZO_REF_SEL")
 
         self.probe_idx_acc.read()
         self.vforw_idx_acc.read()
@@ -102,22 +102,23 @@ class SetupQLDet(object):
         if diff_gain < 0 or diff_gain > 7:
             raise Exception("The differential gain diff_gain should be in [0, 7]")
 
-        kcoeff = int(4 * np.pi * hbw_ext / fs * 2**(24 + diff_gain))
+        k = int(4 * np.pi * hbw_ext / fs * 2**(24 + diff_gain))
 
         self.kcoeff_acc.set(k)
         self.kcoeff_acc.write()
 
         self.diff_gain_acc.set(diff_gain)
         self.diff_gain_acc.write()
+        self.sva_acc.set(int(enable_sva))
+        self.sva_acc.write()
 
-    def get_qldet_params(fs, self):
+    def get_qldet_params(self, fs):
 
         self.kcoeff_acc.read()
         self.diff_gain_acc.read()
         self.sva_acc.read()
 
-        kcoeff = self.kcoeff_acc[0]
-        hbw_ext = kcoeff * fs * 2**(24 + diff_gain) / (4 * np.pi)
+        hbw_ext = self.kcoeff_acc[0] * fs / 2**(24 + self.diff_gain_acc[0]) / (4 * np.pi)
 
         df_quantization = fs / (np.pi * 2**(16 + self.diff_gain_acc[0]))
         df_range = df_quantization * 2**16
@@ -136,26 +137,30 @@ class SetupQLDet(object):
         df_quantization = self.get_qldet_params(fs)["df_quantization"]
         self.daq_samples_acc.read()
         self.daq1_acc.read()
-        det_td = -self.daq1_acc[10,:self.daq_samples_acc[1]] * self.df_quantization
-        hbw_td = self.daq1_acc[11,:self.daq_samples_acc[1]] * self.df_quantization
+        det_td = -self.daq1_acc[10,:self.daq_samples_acc[1]] * df_quantization
+        hbw_td = self.daq1_acc[11,:self.daq_samples_acc[1]] * df_quantization
         return (hbw_td, det_td)
 
 if __name__ == "__main__":
 
     args = docopt(__doc__, version=VERSION)
     dmap = args["<dmap>"]
-    fs = args["<fs>"]
+    fs = float(args["<fs>"])
     hbw_ext = args["--hbw-ext"]
     diff_gain = args["--diff-gain"]
     enable_sva = args["--enable-sva"]
-    hbw_limits = [float(v) for v in arg["--hbw-limits"].split(",")]
-    det_limits = [float(v) for v in arg["--det-limits"].split(",")]
-    continuous = arg["--continuous"]
+    hbw_limits = args["--hbw-limits"] if args["--hbw-limits"] else "0,500"
+    det_limits = args["--det-limits"] if args["--det-limits"] else "-500,500"
+    hbw_limits = [float(v) for v in hbw_limits.split(",")]
+    det_limits = [float(v) for v in det_limits.split(",")]
+    continuous = args["--continuous"]
 
     qldetio = SetupQLDet(dmap)
 
     if args["set"]:
         params = qldetio.get_qldet_params(fs)
+
+        print(hbw_ext, diff_gain, enable_sva)
 
         if hbw_ext is not None:
             params["--hbw-ext"] = hbw_ext
@@ -167,9 +172,9 @@ if __name__ == "__main__":
             params["--enable-sva"] = enable_sva
 
         qldetio.set_qldet_params(fs,
-                                 float(params["hbw_ext"]),
-                                 int(params["diff_gain"]),
-                                 bool(int(params["enable_sva"])))
+                                 float(params["--hbw-ext"]),
+                                 int(params["--diff-gain"]),
+                                 bool(int(params["--enable-sva"])))
 
     if args["get"]:
         params = qldetio.get_qldet_params(fs)
@@ -182,28 +187,26 @@ if __name__ == "__main__":
 
     if args["plot"]:
         plt.ion()
-        (hbw_td, det_td) = self.get_hbwdet_traces(fs)
-        fig, (ax_hbw, ax_det) = plt.subplot(ncols=2)
+        (hbw_td, det_td) = qldetio.get_hbwdet_traces(fs)
+        fig, (ax_hbw, ax_det) = plt.subplots(1,2)
         ax_hbw.set_xlabel("Sample")
         ax_hbw.set_ylabel("Half bandwidth (Hz)")
         ax_det.set_xlabel("Sample")
         ax_det.set_ylabel("Detuning (Hz)")
 
-        line_hbw = ax_hbw.set_ylim(*hbw_limits)
-        line_det = ax_det.set_ylim(*det_limits)
+        ax_hbw.set_ylim(*hbw_limits)
+        ax_det.set_ylim(*det_limits)
 
-        ax_hbw.plot(hbw_td)
-        ax_det.plot(det_td)
+        line_hbw, = ax_hbw.plot(hbw_td)
+        line_det, = ax_det.plot(det_td)
 
-        fig.draw()
         fig.canvas.flush_events()
 
         if continuous:
             while True:
-                (hbw_td, det_td) = self.get_hbwdet_traces(fs)
+                (hbw_td, det_td) = qldetio.get_hbwdet_traces(fs)
                 line_hbw.set_ydata(hbw_td)
                 line_det.set_ydata(det_td)
-                fig.canvas.draw()
                 fig.canvas.flush_events()
                 time.sleep(DELAY)
 
