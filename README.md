@@ -1,7 +1,7 @@
 Setup QLDET
 ===========
 
-This script is used to setup the QLDET component of the MSK/DESY LLRF system for
+This script is used to setup the [QLDET][1] component of the MSK/DESY LLRF system for
 SRF cavities. It has also the ability to display the detuning and bandwidth traces
 and obtain the parameter set in the component. The component works on single cavity
 (SCAV) systems.
@@ -39,7 +39,7 @@ Options:
 ```
 
 In all mode of operation, the script requires the LLRF control system .dmap file
-and the QLDET sample rate in Hz. The latter parameter depends on the firmware
+and the [QLDET][1] sample rate in Hz. The latter parameter depends on the firmware
 configuration of the used system. To compute the QLDET sample rate, the IQ sample rate
 has to be divided by `C_QLDET_CIC_R` of the respective `PKG_APP_CONFIG` vhdl source.
 
@@ -70,10 +70,12 @@ The differential gain parameter differential gain can be set between 0 and 7.
 Higher values for the differential gain mean higher estimation accuracy but also
 a smaller range.
 
-$$ Q_f = \frac{F_s}{\pi 2^{16 + D_g}} $$
-$$ R_f = 2^{16} \cdot Q_f$$
+```math
+   Q_f = \frac{f_s}{\pi 2^{16 + D_g}}
+   R_f = 2^{16} \cdot Q_f
+```
 
-Where $F_s$ is th QLDET sampling rate, $D_g$ is the differential gain,
+Where $f_s$ is th QLDET sampling rate, $D_g$ is the differential gain,
 $Q_f$ is the frequency quantization and $R_f$ is the frequency range.
 
 Example command using `set` on an XFEL-gun like system:
@@ -92,8 +94,15 @@ The `plot` command reads and converts the half bandwidth and detuning calculated
 by QLDET and plots it. The flag `--continuous` makes the plot to be updated every
 second.
 
-Coefficients calculations
--------------------------
+K calculation
+-------------
+
+```math
+  k = 4 \pi * \frac{\omega_{1/2}^e 2^{24 + D_g}}{f_s}
+```
+
+$k$ is a factor set in hardware that sets the ratio between the forward and the probe
+derivative signal. Refer to the relevant [literature for more information][2].
 
 RF channel assignation
 ----------------------
@@ -106,5 +115,5 @@ Mantainers
 
 * Andrea Bellandi (andrea.bellandi@desy.de)
 
-
-
+[1]: https://gitlab.desy.de/fpgafw/mod/llrf/llrf_qldet
+[2]: https://ieeexplore.ieee.org/document/9381881
