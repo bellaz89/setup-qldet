@@ -71,7 +71,7 @@ Higher values for the differential gain mean higher estimation accuracy but also
 a smaller range.
 
 ```math
-   Q_f = \frac{f_s}{\pi 2^{16 + D_g}}
+   Q_f = \frac{f_s}{\pi 2^{16 + D_g}} \\
    R_f = 2^{16} \cdot Q_f
 ```
 
@@ -98,7 +98,7 @@ K calculation
 -------------
 
 ```math
-  k = 4 \pi * \frac{\omega_{1/2}^e 2^{24 + D_g}}{f_s}
+  k = 4 \pi \frac{\omega_{1/2}^e 2^{24 + D_g}}{f_s}
 ```
 
 $k$ is a factor set in hardware that sets the ratio between the forward and the probe
